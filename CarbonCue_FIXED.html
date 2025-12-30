@@ -1,0 +1,2377 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>CarbonCue — Carbon Footprint Analytics (Hackathon Build)</title>
+  <meta name="description" content="CarbonCue is an offline-first carbon footprint tracker that aggregates activity data, calculates emissions using configurable factors, visualizes trends, and generates action cues." />
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
+  <style>
+    :root{
+      --bg:#f8fafc;
+      --card:#ffffff;
+      --text:#0f172a;
+      --muted:#64748b;
+      --border:#e2e8f0;
+      --brand1:#10b981;
+      --brand2:#0ea5a3;
+      --danger:#ef4444;
+      --warn:#f59e0b;
+      --ok:#22c55e;
+      --shadow: 0 12px 35px rgba(2,6,23,.08);
+      --shadow2: 0 8px 20px rgba(2,6,23,.06);
+      --radius: 18px;
+      --radius2: 12px;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      background:var(--bg);
+      color:var(--text);
+      font-family:var(--sans);
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
+    }
+    a{color:inherit;text-decoration:none}
+    .layout{min-height:100%; display:flex}
+    .sidebar{
+      position:fixed; inset:0 auto 0 0;
+      width:280px; background:var(--card);
+      border-right:1px solid var(--border);
+      padding:18px 14px;
+      transform:translateX(0);
+      transition:transform .18s ease;
+      z-index:50;
+    }
+    .sidebar.hidden{transform:translateX(-105%)}
+    .brand{
+      display:flex; align-items:center; gap:12px;
+      padding:10px 12px; border-radius:14px;
+    }
+    .logo{
+      width:40px;height:40px;border-radius:16px;
+      background:linear-gradient(135deg,var(--brand1),var(--brand2));
+      display:grid; place-items:center;
+      box-shadow: 0 10px 22px rgba(16,185,129,.25);
+      flex:0 0 auto;
+    }
+    .brand h1{font-size:14px; margin:0; line-height:1.15}
+    .brand p{margin:2px 0 0 0; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.12em}
+    .nav{margin-top:14px; display:flex; flex-direction:column; gap:6px}
+    .nav a{
+      display:flex; align-items:center; gap:10px;
+      padding:10px 12px;
+      border-radius:14px;
+      color:#334155;
+      font-weight:600;
+      font-size:14px;
+      transition:background .15s ease, color .15s ease, transform .15s ease;
+    }
+    .nav a:hover{background:#f1f5f9; transform:translateX(2px)}
+    .nav a.active{background:rgba(16,185,129,.12); color:#047857}
+    .nav svg{width:18px;height:18px}
+    .sidebarFooter{
+      position:absolute; left:14px; right:14px; bottom:14px;
+      border-top:1px solid var(--border);
+      padding-top:12px;
+      display:flex; gap:10px; align-items:center; justify-content:space-between;
+    }
+    .pill{
+      border:1px solid var(--border);
+      background:#f8fafc;
+      padding:8px 10px;
+      border-radius:999px;
+      font-size:12px;
+      color:#0f172a;
+      display:flex; gap:8px; align-items:center;
+      max-width:180px;
+    }
+    .pill b{font-weight:700}
+    .btn{
+      border:1px solid var(--border);
+      background:var(--card);
+      padding:10px 12px;
+      border-radius:14px;
+      font-weight:700;
+      font-size:13px;
+      cursor:pointer;
+      transition:transform .12s ease, box-shadow .12s ease, background .12s ease, border .12s ease;
+    }
+    .btn:hover{transform:translateY(-1px); box-shadow:var(--shadow2)}
+    .btn.primary{
+      border-color:rgba(16,185,129,.35);
+      background:linear-gradient(135deg, rgba(16,185,129,.12), rgba(14,165,163,.10));
+    }
+    .btn.danger{
+      border-color:rgba(239,68,68,.35);
+      background:linear-gradient(135deg, rgba(239,68,68,.12), rgba(245,158,11,.08));
+    }
+    .btn.flat{border-color:transparent;background:transparent; box-shadow:none}
+    .btn.small{padding:8px 10px; border-radius:12px; font-size:12px}
+    .main{
+      margin-left:280px;
+      width:100%;
+      padding:22px 22px 40px 22px;
+    }
+    .topbar{
+      position:sticky; top:0;
+      background:linear-gradient(180deg, rgba(248,250,252,.98), rgba(248,250,252,.90));
+      backdrop-filter:saturate(160%) blur(10px);
+      z-index:40;
+      border-bottom:1px solid rgba(226,232,240,.7);
+      padding:12px 0;
+      margin:-22px -22px 20px -22px;
+    }
+    .topbarInner{
+      padding:0 22px;
+      display:flex; gap:12px; align-items:center; justify-content:space-between;
+    }
+    .titleWrap{display:flex; gap:12px; align-items:center}
+    .menuBtn{display:none}
+    .title h2{margin:0; font-size:18px}
+    .title p{margin:2px 0 0 0; color:var(--muted); font-size:13px}
+    .actions{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+    .search{
+      display:flex; align-items:center; gap:10px;
+      border:1px solid var(--border);
+      border-radius:999px;
+      padding:10px 12px;
+      background:var(--card);
+      min-width:280px;
+    }
+    .search input{
+      border:none; outline:none; background:transparent;
+      width:100%;
+      font-size:13px;
+    }
+    .grid{display:grid; gap:14px}
+    .grid.cols4{grid-template-columns:repeat(4, minmax(0,1fr))}
+    .grid.cols3{grid-template-columns:repeat(3, minmax(0,1fr))}
+    .grid.cols2{grid-template-columns:repeat(2, minmax(0,1fr))}
+    .card{
+      background:var(--card);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow2);
+      padding:16px;
+    }
+    .card h3{margin:0 0 10px 0; font-size:14px}
+    .muted{color:var(--muted)}
+    .kpi{
+      display:flex; align-items:flex-start; justify-content:space-between; gap:12px;
+    }
+    .kpi .num{font-size:22px; font-weight:900; letter-spacing:-.02em}
+    .kpi .lbl{margin-top:6px; font-size:12px; color:var(--muted)}
+    .badge{
+      font-size:11px;
+      font-weight:800;
+      padding:6px 10px;
+      border-radius:999px;
+      border:1px solid var(--border);
+      background:#f8fafc;
+      display:inline-flex; align-items:center; gap:6px;
+      white-space:nowrap;
+    }
+    .badge.ok{border-color:rgba(34,197,94,.35); background:rgba(34,197,94,.10); color:#166534}
+    .badge.warn{border-color:rgba(245,158,11,.35); background:rgba(245,158,11,.10); color:#92400e}
+    .badge.danger{border-color:rgba(239,68,68,.35); background:rgba(239,68,68,.10); color:#991b1b}
+    .row{display:flex; gap:12px; align-items:center; flex-wrap:wrap}
+    .field{display:flex; flex-direction:column; gap:6px; width:100%}
+    .field label{font-size:12px; color:#334155; font-weight:800}
+    .input, select, textarea{
+      border:1px solid var(--border);
+      background:var(--card);
+      border-radius:14px;
+      padding:11px 12px;
+      font-size:13px;
+      outline:none;
+      transition:border .12s ease, box-shadow .12s ease;
+    }
+    .input:focus, select:focus, textarea:focus{
+      border-color:rgba(16,185,129,.55);
+      box-shadow:0 0 0 4px rgba(16,185,129,.13);
+    }
+    textarea{min-height:88px; resize:vertical}
+    .help{font-size:12px; color:var(--muted); line-height:1.3}
+    .split{display:grid; gap:14px; grid-template-columns: 1.2fr .8fr}
+    .table{
+      width:100%; border-collapse:separate; border-spacing:0;
+      overflow:hidden;
+      border-radius:16px;
+      border:1px solid var(--border);
+    }
+    .table th, .table td{
+      padding:10px 10px;
+      border-bottom:1px solid var(--border);
+      font-size:13px;
+      text-align:left;
+      vertical-align:top;
+    }
+    .table th{
+      background:#f8fafc;
+      font-size:12px;
+      text-transform:uppercase;
+      letter-spacing:.08em;
+      color:#475569;
+    }
+    .table tr:last-child td{border-bottom:none}
+    .right{text-align:right}
+    .mono{font-family:var(--mono)}
+    .hint{
+      padding:12px 12px;
+      border-radius:16px;
+      background:linear-gradient(135deg, rgba(16,185,129,.10), rgba(14,165,163,.08));
+      border:1px solid rgba(16,185,129,.22);
+      color:#064e3b;
+      font-weight:700;
+      font-size:13px;
+      display:flex;
+      gap:10px;
+      align-items:flex-start;
+    }
+    .hint small{display:block; font-weight:600; color:#065f46; margin-top:6px}
+    .empty{
+      text-align:center;
+      padding:26px 12px;
+      border-radius:18px;
+      border:1px dashed rgba(148,163,184,.65);
+      background:rgba(255,255,255,.6);
+    }
+    .empty h4{margin:0 0 6px 0}
+    .empty p{margin:0; color:var(--muted); font-size:13px; line-height:1.4}
+    .toastWrap{
+      position:fixed; right:16px; bottom:16px; z-index:100;
+      display:flex; flex-direction:column; gap:10px;
+      max-width:380px;
+    }
+    .toast{
+      background:var(--card);
+      border:1px solid var(--border);
+      border-radius:16px;
+      box-shadow:var(--shadow);
+      padding:12px 12px;
+      display:flex; gap:10px; align-items:flex-start;
+      animation:pop .18s ease;
+    }
+    @keyframes pop{from{transform:translateY(8px); opacity:.2} to{transform:translateY(0); opacity:1}}
+    .toast .t{font-weight:900; font-size:13px}
+    .toast .m{font-size:12px; color:var(--muted); margin-top:3px; line-height:1.35}
+    .toast .x{margin-left:auto}
+    .modalOverlay{
+      position:fixed; inset:0; background:rgba(15,23,42,.45);
+      display:none; align-items:center; justify-content:center;
+      padding:18px;
+      z-index:120;
+    }
+    .modalOverlay.open{display:flex}
+    .modal{
+      width:min(820px, 100%);
+      background:var(--card);
+      border-radius:22px;
+      border:1px solid rgba(226,232,240,.85);
+      box-shadow:var(--shadow);
+      overflow:hidden;
+    }
+    .modalHeader{
+      display:flex; align-items:center; justify-content:space-between;
+      padding:14px 16px;
+      border-bottom:1px solid var(--border);
+      background:linear-gradient(135deg, rgba(16,185,129,.08), rgba(14,165,163,.06));
+    }
+    .modalHeader h3{margin:0; font-size:14px}
+    .modalBody{padding:16px}
+    .modalFooter{
+      padding:14px 16px;
+      border-top:1px solid var(--border);
+      display:flex; gap:10px; justify-content:flex-end; flex-wrap:wrap;
+    }
+
+    @media (max-width: 1020px){
+      .grid.cols4{grid-template-columns:repeat(2, minmax(0,1fr))}
+      .split{grid-template-columns:1fr}
+    }
+    @media (max-width: 860px){
+      .sidebar{width:272px}
+      .main{margin-left:0; padding:18px 14px 34px 14px}
+      .topbar{margin:-18px -14px 16px -14px}
+      .topbarInner{padding:0 14px}
+      .menuBtn{display:inline-flex}
+      .search{min-width:0; width:100%}
+      .actions{width:100%}
+      .grid.cols3{grid-template-columns:1fr}
+      .grid.cols2{grid-template-columns:1fr}
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside id="sidebar" class="sidebar hidden" aria-label="Sidebar">
+      <div class="brand">
+        <div class="logo" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"></path>
+            <path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"></path>
+          </svg>
+        </div>
+        <div>
+          <h1>CarbonCue</h1>
+          <p>Carbon Analytics</p>
+        </div>
+        <button class="btn flat small" id="closeSidebar" title="Close menu" aria-label="Close menu">✕</button>
+      </div>
+
+      <nav class="nav" id="nav">
+        <a href="#/dashboard" data-route="dashboard">
+          <span aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="7" height="9" x="3" y="3" rx="1"></rect><rect width="7" height="5" x="14" y="3" rx="1"></rect><rect width="7" height="9" x="14" y="12" rx="1"></rect><rect width="7" height="5" x="3" y="16" rx="1"></rect></svg>
+          </span>
+          Dashboard
+        </a>
+        <a href="#/data" data-route="data">
+          <span aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" x2="12" y1="3" y2="15"></line></svg>
+          </span>
+          Data Upload
+        </a>
+        <a href="#/reports" data-route="reports">
+          <span aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"></path><path d="M14 2v4a2 2 0 0 0 2 2h4"></path><path d="M10 9H8"></path><path d="M16 13H8"></path><path d="M16 17H8"></path></svg>
+          </span>
+          Reports
+        </a>
+        <a href="#/cues" data-route="cues">
+          <span aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"></path><path d="M9 18h6"></path><path d="M10 22h4"></path></svg>
+          </span>
+          Action Cues
+        </a>
+        <a href="#/settings" data-route="settings">
+          <span aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg>
+          </span>
+          Settings
+        </a>
+      </nav>
+
+      <div class="sidebarFooter">
+        <div class="pill" title="Data is stored locally in this browser">
+          <span aria-hidden="true">💾</span><span><b>Local</b> storage</span>
+        </div>
+        <button class="btn small" id="backupBtn" title="Download backup JSON">Backup</button>
+      </div>
+    </aside>
+
+    <main class="main" id="main">
+      <div class="topbar">
+        <div class="topbarInner">
+          <div class="titleWrap">
+            <button class="btn menuBtn" id="openSidebar" aria-label="Open menu">☰</button>
+            <div class="title">
+              <h2 id="pageTitle">CarbonCue</h2>
+              <p id="pageSub">Carbon footprint analytics that actually works.</p>
+            </div>
+          </div>
+          <div class="actions">
+            <div class="search" role="search">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>
+              <input id="globalSearch" placeholder="Search entries, departments, notes…" />
+            </div>
+            <button class="btn primary" id="quickAddBtn">+ Quick Add</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="page"></div>
+    </main>
+  </div>
+
+  <div class="toastWrap" id="toastWrap" aria-live="polite" aria-atomic="true"></div>
+
+  <div class="modalOverlay" id="modalOverlay" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="modal">
+      <div class="modalHeader">
+        <h3 id="modalTitle">Modal</h3>
+        <button class="btn flat small" id="modalClose" aria-label="Close">✕</button>
+      </div>
+      <div class="modalBody" id="modalBody"></div>
+      <div class="modalFooter" id="modalFooter"></div>
+    </div>
+  </div>
+
+  <script>
+    const STORE_KEY = "carboncue_store_v1";
+
+    const FACTOR_PRESETS = {
+      "grid_india_cea_2023_24": {
+        id: "grid_india_cea_2023_24",
+        name: "Electricity (India grid avg)",
+        category: "Electricity",
+        unit: "kWh",
+        kgPerUnit: 0.727,
+        source: "CEA CO₂ baseline (reported weighted avg for 2023–24)",
+        scopeDefault: "Scope 2"
+      },
+      "fuel_petrol_l": {
+        id: "fuel_petrol_l",
+        name: "Petrol / Gasoline (combustion)",
+        category: "Transport",
+        unit: "L",
+        kgPerUnit: 2.3484895454639396,
+        source: "US EPA GHG Equivalencies (8.89 kg CO₂/gal) converted to kg/L",
+        scopeDefault: "Scope 1"
+      },
+      "fuel_diesel_l": {
+        id: "fuel_diesel_l",
+        name: "Diesel (combustion)",
+        category: "Transport",
+        unit: "L",
+        kgPerUnit: 2.689271493005951,
+        source: "US EPA GHG Equivalencies (10.180 kg CO₂/gal) converted to kg/L",
+        scopeDefault: "Scope 1"
+      },
+      "fuel_lpg_propane_l": {
+        id: "fuel_lpg_propane_l",
+        name: "LPG / Propane (combustion)",
+        category: "Stationary",
+        unit: "L",
+        kgPerUnit: 1.5189893010593534,
+        source: "US EIA CO₂ coefficients (5.75 kg CO₂/gal propane) converted to kg/L",
+        scopeDefault: "Scope 1"
+      },
+      "fuel_natgas_m3": {
+        id: "fuel_natgas_m3",
+        name: "Natural gas (combustion)",
+        category: "Stationary",
+        unit: "m³",
+        kgPerUnit: 1.9355968830047896,
+        source: "US EIA CO₂ coefficients (54.81 kg CO₂/MCF) converted to kg/m³",
+        scopeDefault: "Scope 1"
+      }
+    };
+
+    const DEFAULT_STORE = {
+      meta: { version: 1, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+      org: {
+        name: "Your Organization",
+        currency: "INR",
+        gridLabel: "India (CEA grid avg)",
+        gridFactorId: "grid_india_cea_2023_24"
+      },
+      departments: ["Operations", "Manufacturing", "Logistics", "Admin", "Sales"],
+      targets: { monthlyKg: null, annualKg: null },
+      factors: Object.fromEntries(Object.values(FACTOR_PRESETS).map(f => [f.id, f])),
+      entries: [],
+      adoptedActions: []
+    };
+
+    const $ = (sel, root=document) => root.querySelector(sel);
+    const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+    const fmt = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
+    const fmt0 = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 });
+    const fmt4 = new Intl.NumberFormat(undefined, { maximumFractionDigits: 4 });
+    const todayISO = () => new Date().toISOString().slice(0,10);
+
+    function uid(){
+      return "e_" + Math.random().toString(16).slice(2) + "_" + Date.now().toString(16);
+    }
+
+    function loadStore(){
+      try{
+        const raw = localStorage.getItem(STORE_KEY);
+        if(!raw) return structuredClone(DEFAULT_STORE);
+        const parsed = JSON.parse(raw);
+        if(!parsed || !parsed.meta || parsed.meta.version !== 1) return structuredClone(DEFAULT_STORE);
+        const merged = structuredClone(DEFAULT_STORE);
+        merged.meta = parsed.meta || merged.meta;
+        merged.org = { ...merged.org, ...(parsed.org||{}) };
+        merged.departments = Array.isArray(parsed.departments) && parsed.departments.length ? parsed.departments : merged.departments;
+        merged.targets = { ...merged.targets, ...(parsed.targets||{}) };
+        merged.factors = { ...merged.factors, ...(parsed.factors||{}) };
+        merged.entries = Array.isArray(parsed.entries) ? parsed.entries : [];
+        merged.adoptedActions = Array.isArray(parsed.adoptedActions) ? parsed.adoptedActions : [];
+        return merged;
+      }catch(e){
+        return structuredClone(DEFAULT_STORE);
+      }
+    }
+
+    function saveStore(){
+      store.meta.updatedAt = new Date().toISOString();
+      localStorage.setItem(STORE_KEY, JSON.stringify(store));
+      updateSidebarPill();
+    }
+
+    function toast(title, message, kind="ok"){
+      const wrap = $("#toastWrap");
+      const id = uid();
+      const icon = kind === "danger" ? "⛔" : kind === "warn" ? "⚠️" : "✅";
+      const el = document.createElement("div");
+      el.className = "toast";
+      el.innerHTML = `
+        <div style="font-size:18px; line-height:1">${icon}</div>
+        <div>
+          <div class="t">${escapeHtml(title)}</div>
+          <div class="m">${escapeHtml(message)}</div>
+        </div>
+        <button class="btn flat small x" aria-label="Dismiss" data-x="${id}">✕</button>
+      `;
+      el.dataset.id = id;
+      wrap.appendChild(el);
+      const kill = () => { if(el && el.parentNode) el.parentNode.removeChild(el); };
+      el.addEventListener("click", (e)=>{
+        if(e.target && e.target.closest("[data-x]")) kill();
+      });
+      setTimeout(kill, 5200);
+    }
+
+    function escapeHtml(s){
+      return String(s ?? "")
+        .replaceAll("&","&amp;")
+        .replaceAll("<","&lt;")
+        .replaceAll(">","&gt;")
+        .replaceAll('"',"&quot;")
+        .replaceAll("'","&#039;");
+    }
+
+    function openModal({title, bodyHtml, footerHtml, onMount}){
+      const overlay = $("#modalOverlay");
+      $("#modalTitle").textContent = title || "Modal";
+      $("#modalBody").innerHTML = bodyHtml || "";
+      $("#modalFooter").innerHTML = footerHtml || "";
+      overlay.classList.add("open");
+      overlay.setAttribute("aria-hidden","false");
+      const close = () => closeModal();
+      $("#modalClose").onclick = close;
+      overlay.onclick = (e)=>{ if(e.target === overlay) close(); };
+      document.addEventListener("keydown", escHandler);
+      if(typeof onMount === "function") onMount();
+    }
+    function escHandler(e){ if(e.key === "Escape") closeModal(); }
+    function closeModal(){
+      const overlay = $("#modalOverlay");
+      overlay.classList.remove("open");
+      overlay.setAttribute("aria-hidden","true");
+      $("#modalBody").innerHTML = "";
+      $("#modalFooter").innerHTML = "";
+      overlay.onclick = null;
+      document.removeEventListener("keydown", escHandler);
+    }
+
+    function kgToDisplay(kg){
+      if(kg >= 1000) return {v: kg/1000, u: "tCO₂e"};
+      return {v: kg, u: "kgCO₂e"};
+    }
+
+    function computeEntryEmissions({activityValue, factorId, customFactorKgPerUnit}){
+      const val = Number(activityValue);
+      if(!Number.isFinite(val) || val < 0) return 0;
+      if(customFactorKgPerUnit != null && customFactorKgPerUnit !== ""){
+        const f = Number(customFactorKgPerUnit);
+        if(Number.isFinite(f) && f >= 0) return val * f;
+      }
+      const factor = store.factors[factorId];
+      if(!factor) return 0;
+      return val * Number(factor.kgPerUnit || 0);
+    }
+
+    function normalizeCategory(cat){
+      const c = String(cat||"").trim().toLowerCase();
+      if(["electricity","power","scope2"].includes(c)) return "Electricity";
+      if(["transport","travel","fleet"].includes(c)) return "Transport";
+      if(["waste"].includes(c)) return "Waste";
+      if(["stationary","fuel","boiler"].includes(c)) return "Stationary";
+      if(["supply chain","supplychain","scope3","procurement"].includes(c)) return "Supply Chain";
+      if(!c) return "Electricity";
+      return c[0].toUpperCase() + c.slice(1);
+    }
+
+    function defaultFactorFor(category, unitHint){
+      const cat = normalizeCategory(category);
+      const unit = String(unitHint||"").trim();
+      if(cat === "Electricity"){
+        return store.org.gridFactorId || "grid_india_cea_2023_24";
+      }
+      if(cat === "Transport"){
+        if(unit.toLowerCase() === "l"){
+          return "fuel_petrol_l";
+        }
+      }
+      if(cat === "Stationary"){
+        if(unit === "m³" || unit.toLowerCase() === "m3") return "fuel_natgas_m3";
+        if(unit.toLowerCase() === "l") return "fuel_lpg_propane_l";
+      }
+      return "";
+    }
+
+    function addEntry(entry){
+      const e = {
+        id: uid(),
+        createdAt: new Date().toISOString(),
+        date: entry.date || todayISO(),
+        department: entry.department || store.departments[0] || "Operations",
+        category: normalizeCategory(entry.category),
+        activityLabel: String(entry.activityLabel || "").trim() || "Activity",
+        activityValue: Number(entry.activityValue || 0),
+        activityUnit: String(entry.activityUnit || "").trim() || "kWh",
+        factorId: entry.factorId || defaultFactorFor(entry.category, entry.activityUnit),
+        customFactorKgPerUnit: entry.customFactorKgPerUnit ?? "",
+        scope: entry.scope || "",
+        notes: String(entry.notes || "").trim()
+      };
+      e.emissionsKg = computeEntryEmissions(e);
+      if(!e.scope){
+        const f = store.factors[e.factorId];
+        e.scope = f?.scopeDefault || (e.category === "Electricity" ? "Scope 2" : "Scope 1");
+      }
+      store.entries.unshift(e);
+      saveStore();
+      toast("Entry added", "Emissions calculated and saved to local storage.", "ok");
+      render();
+    }
+
+    function updateEntry(id, patch){
+      const idx = store.entries.findIndex(e=>e.id===id);
+      if(idx === -1) return;
+      const e = store.entries[idx];
+      const next = { ...e, ...patch };
+      next.category = normalizeCategory(next.category);
+      next.emissionsKg = computeEntryEmissions(next);
+      if(!next.scope){
+        const f = store.factors[next.factorId];
+        next.scope = f?.scopeDefault || (next.category === "Electricity" ? "Scope 2" : "Scope 1");
+      }
+      store.entries[idx] = next;
+      saveStore();
+      toast("Entry updated", "Your changes were saved.", "ok");
+      render();
+    }
+
+    function deleteEntry(id){
+      const before = store.entries.length;
+      store.entries = store.entries.filter(e=>e.id!==id);
+      if(store.entries.length !== before){
+        saveStore();
+        toast("Entry deleted", "Removed from local storage.", "warn");
+        render();
+      }
+    }
+
+    function parseCSV(text){
+      const rows = [];
+      let i=0, field="", row=[], inQuotes=false;
+      const pushField = ()=>{ row.push(field); field=""; };
+      const pushRow = ()=>{ rows.push(row); row=[]; };
+      while(i < text.length){
+        const ch = text[i];
+        if(inQuotes){
+          if(ch === '"'){
+            if(text[i+1] === '"'){ field += '"'; i+=2; continue; }
+            inQuotes=false; i++; continue;
+          }
+          field += ch; i++; continue;
+        }else{
+          if(ch === '"'){ inQuotes=true; i++; continue; }
+          if(ch === ","){ pushField(); i++; continue; }
+          if(ch === "\n"){ pushField(); pushRow(); i++; continue; }
+          if(ch === "\r"){ i++; continue; }
+          field += ch; i++; continue;
+        }
+      }
+      pushField(); pushRow();
+      const cleaned = rows.filter(r => r.some(c => String(c||"").trim() !== ""));
+      if(cleaned.length === 0) return [];
+      const headers = cleaned[0].map(h => String(h||"").trim().toLowerCase());
+      const out = [];
+      for(let r=1; r<cleaned.length; r++){
+        const obj = {};
+        for(let c=0; c<headers.length; c++){
+          obj[headers[c] || ("col_"+c)] = cleaned[r][c];
+        }
+        out.push(obj);
+      }
+      return out;
+    }
+
+    function download(filename, content, mime="text/plain"){
+      const blob = new Blob([content], {type:mime});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url), 6000);
+    }
+
+    function entriesFiltered({q, from, to, category, department, scope}){
+      const query = String(q||"").trim().toLowerCase();
+      const fromD = from ? new Date(from) : null;
+      const toD = to ? new Date(to) : null;
+      const cat = category && category !== "All" ? normalizeCategory(category) : null;
+      const dep = department && department !== "All" ? department : null;
+      const sc = scope && scope !== "All" ? scope : null;
+
+      return store.entries.filter(e=>{
+        const d = new Date(e.date);
+        if(fromD && d < fromD) return false;
+        if(toD && d > new Date(toD.getTime() + 24*3600*1000 - 1)) return false;
+        if(cat && normalizeCategory(e.category) !== cat) return false;
+        if(dep && e.department !== dep) return false;
+        if(sc && e.scope !== sc) return false;
+        if(!query) return true;
+        const hay = `${e.date} ${e.department} ${e.category} ${e.activityLabel} ${e.notes} ${e.activityUnit}`.toLowerCase();
+        return hay.includes(query);
+      });
+    }
+
+    function groupByMonth(entries){
+      const map = new Map();
+      for(const e of entries){
+        const key = String(e.date||"").slice(0,7) || "Unknown";
+        map.set(key, (map.get(key)||0) + (Number(e.emissionsKg)||0));
+      }
+      const keys = Array.from(map.keys()).sort();
+      return { labels: keys, values: keys.map(k=>map.get(k)) };
+    }
+
+    function breakdownByCategory(entries){
+      const map = new Map();
+      for(const e of entries){
+        const k = normalizeCategory(e.category);
+        map.set(k, (map.get(k)||0) + (Number(e.emissionsKg)||0));
+      }
+      const labels = Array.from(map.keys()).sort((a,b)=>map.get(b)-map.get(a));
+      return { labels, values: labels.map(l=>map.get(l)) };
+    }
+
+    function breakdownByDepartment(entries){
+      const map = new Map();
+      for(const e of entries){
+        const k = e.department || "Unknown";
+        map.set(k, (map.get(k)||0) + (Number(e.emissionsKg)||0));
+      }
+      const labels = Array.from(map.keys()).sort((a,b)=>map.get(b)-map.get(a));
+      return { labels, values: labels.map(l=>map.get(l)) };
+    }
+
+    function monthKey(d){
+      const dt = new Date(d);
+      return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,"0")}`;
+    }
+
+    function previousMonthKey(current){
+      const [y,m] = current.split("-").map(Number);
+      const dt = new Date(y, m-2, 1);
+      return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,"0")}`;
+    }
+
+    function kpi(entries){
+      const total = entries.reduce((s,e)=>s+(Number(e.emissionsKg)||0),0);
+      const nowM = monthKey(new Date());
+      const prevM = previousMonthKey(nowM);
+      const nowTot = store.entries.filter(e=>monthKey(e.date)===nowM).reduce((s,e)=>s+(Number(e.emissionsKg)||0),0);
+      const prevTot = store.entries.filter(e=>monthKey(e.date)===prevM).reduce((s,e)=>s+(Number(e.emissionsKg)||0),0);
+      const mom = prevTot > 0 ? ((nowTot - prevTot)/prevTot)*100 : null;
+
+      const byCat = breakdownByCategory(entries);
+      const topCat = byCat.labels[0] || "—";
+      const topCatPct = byCat.values.length ? (byCat.values[0]/Math.max(total,1))*100 : 0;
+
+      const coverage = new Set(entries.map(e=>normalizeCategory(e.category))).size;
+      const coverageScore = Math.min(100, Math.round((coverage/5)*100));
+      const completeness = Math.min(100, Math.round((entries.length/30)*100));
+
+      const cueScore = Math.round((coverageScore*0.45) + (completeness*0.35) + (Math.min(20, store.adoptedActions.length)*1.0));
+
+      return { total, mom, topCat, topCatPct, cueScore, coverageScore, completeness };
+    }
+
+    function makeCueCards(entries){
+      const { total, mom, topCat, topCatPct, cueScore, coverageScore, completeness } = kpi(entries);
+      const disp = kgToDisplay(total);
+      const momBadge = mom == null ? `<span class="badge warn">No baseline</span>` :
+        mom <= -2 ? `<span class="badge ok">↓ ${fmt.format(Math.abs(mom))}% MoM</span>` :
+        mom < 2 ? `<span class="badge warn">≈ ${fmt.format(mom)}% MoM</span>` :
+        `<span class="badge danger">↑ ${fmt.format(mom)}% MoM</span>`;
+
+      const cueBadge = cueScore >= 75 ? `ok` : cueScore >= 45 ? `warn` : `danger`;
+      const covBadge = coverageScore >= 70 ? `ok` : coverageScore >= 40 ? `warn` : `danger`;
+      const compBadge = completeness >= 70 ? `ok` : completeness >= 40 ? `warn` : `danger`;
+
+      return `
+        <div class="grid cols4">
+          <div class="card">
+            <div class="kpi">
+              <div>
+                <div class="num">${fmt.format(disp.v)} <span class="muted" style="font-size:12px;font-weight:800">${disp.u}</span></div>
+                <div class="lbl">Total emissions (filtered)</div>
+              </div>
+              ${momBadge}
+            </div>
+          </div>
+          <div class="card">
+            <div class="kpi">
+              <div>
+                <div class="num">${escapeHtml(topCat)}</div>
+                <div class="lbl">Top source • ${fmt.format(topCatPct)}%</div>
+              </div>
+              <span class="badge warn">Priority</span>
+            </div>
+          </div>
+          <div class="card">
+            <div class="kpi">
+              <div>
+                <div class="num">${cueScore}<span class="muted" style="font-size:12px;font-weight:900">/100</span></div>
+                <div class="lbl">Cue Score (data + actions)</div>
+              </div>
+              <span class="badge ${cueBadge}">${cueBadge==="ok"?"Strong":"Needs work"}</span>
+            </div>
+          </div>
+          <div class="card">
+            <div class="kpi">
+              <div>
+                <div class="num">${coverageScore}<span class="muted" style="font-size:12px;font-weight:900">%</span></div>
+                <div class="lbl">Category coverage</div>
+              </div>
+              <span class="badge ${covBadge}">${covBadge==="ok"?"Balanced":"Gaps"}</span>
+            </div>
+          </div>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <span class="badge ${compBadge}">Log density: ${completeness}%</span>
+          <span class="badge warn">Data stays on-device • use Backup in sidebar</span>
+        </div>
+      `;
+    }
+
+    function cuesFor(entries){
+      const { labels, values } = breakdownByCategory(entries);
+      const total = entries.reduce((s,e)=>s+(Number(e.emissionsKg)||0),0) || 0;
+      const cues = [];
+
+      const top = labels[0];
+      const topVal = values[0] || 0;
+
+      if(!entries.length){
+        cues.push({
+          id:"cue_start",
+          title:"Start logging your first week of data",
+          why:"No entries yet, so CarbonCue can't generate insights.",
+          impact:"High",
+          effort:"Low",
+          steps:["Go to Data Upload → Quick Add", "Log electricity + fuel (if any) for 7 days", "Import bills via CSV if available"]
+        });
+        return cues;
+      }
+
+      if(top === "Electricity"){
+        cues.push({
+          id:"cue_elec_1",
+          title:"Cut peak electricity first (fastest wins)",
+          why:`Electricity is your biggest source (${fmt.format((topVal/total)*100)}%).`,
+          impact:"High",
+          effort:"Medium",
+          steps:["Add department-wise meters or split bills by area", "Shift heavy loads to off-peak (if applicable)", "Upgrade lighting + HVAC controls", "Consider on-site solar / green tariff if available"]
+        });
+      } else if(top === "Transport"){
+        cues.push({
+          id:"cue_tr_1",
+          title:"Reduce fuel burn with route + vehicle discipline",
+          why:`Transport dominates (${fmt.format((topVal/total)*100)}%).`,
+          impact:"High",
+          effort:"Medium",
+          steps:["Track liters per trip and idling time", "Optimize routes & consolidate trips", "Maintain tire pressure + servicing schedule", "Pilot EV/hybrid for high-utilization routes"]
+        });
+      } else if(top === "Stationary"){
+        cues.push({
+          id:"cue_st_1",
+          title:"Fix boilers & combustion hotspots",
+          why:`Stationary fuel use dominates (${fmt.format((topVal/total)*100)}%).`,
+          impact:"High",
+          effort:"Medium",
+          steps:["Check burner tuning + insulation", "Recover waste heat where possible", "Switch to lower-carbon fuels when feasible", "Monitor leaks & standby consumption"]
+        });
+      } else if(top === "Waste"){
+        cues.push({
+          id:"cue_w_1",
+          title:"Attack waste generation + disposal method",
+          why:`Waste is your top driver (${fmt.format((topVal/total)*100)}%).`,
+          impact:"Medium",
+          effort:"Medium",
+          steps:["Separate streams (recyclables, organics, landfill)", "Measure weight per stream weekly", "Increase diversion / composting", "Prefer recyclers with verified downstream processing"]
+        });
+      } else {
+        cues.push({
+          id:"cue_sc_1",
+          title:"Scope 3: start with the top 10 suppliers",
+          why:`Supply chain emissions are largest (${fmt.format((topVal/total)*100)}%).`,
+          impact:"High",
+          effort:"High",
+          steps:["Collect supplier activity data or spend", "Use category-specific factors", "Ask for supplier-specific EFs where available", "Create a procurement reduction checklist"]
+        });
+      }
+
+      const highSpikes = detectSpikes(entries);
+      if(highSpikes.length){
+        cues.push({
+          id:"cue_spike",
+          title:`Investigate ${highSpikes.length} emission spike(s)`,
+          why:"Large changes often indicate data gaps, leaks, or operational shifts.",
+          impact:"Medium",
+          effort:"Low",
+          steps: highSpikes.slice(0,4).map(s => `${s.date}: +${fmt.format(s.deltaKg)} kgCO₂e vs baseline`)
+        });
+      }
+
+      const adoption = store.adoptedActions.length;
+      if(adoption < 2){
+        cues.push({
+          id:"cue_adopt",
+          title:"Turn insight into action (track adoption)",
+          why:"Judges love measurable action, not just charts.",
+          impact:"Medium",
+          effort:"Low",
+          steps:["Pick 2 cues and mark them 'Adopted'", "Add notes about what changed", "Compare next month trend in Dashboard"]
+        });
+      }
+
+      return cues;
+    }
+
+    function detectSpikes(entries){
+      const daily = new Map();
+      for(const e of entries){
+        const k = e.date;
+        daily.set(k, (daily.get(k)||0) + (Number(e.emissionsKg)||0));
+      }
+      const days = Array.from(daily.keys()).sort();
+      const vals = days.map(d => daily.get(d));
+      if(vals.length < 7) return [];
+      const mean = vals.reduce((a,b)=>a+b,0)/vals.length;
+      const std = Math.sqrt(vals.reduce((s,v)=>s+Math.pow(v-mean,2),0)/vals.length) || 1;
+      const spikes = [];
+      for(let i=0;i<days.length;i++){
+        const z = (vals[i]-mean)/std;
+        if(z >= 2.2){
+          spikes.push({date:days[i], deltaKg: vals[i]-mean});
+        }
+      }
+      return spikes;
+    }
+
+    let store = loadStore();
+    let charts = [];
+
+    function updateSidebarPill(){
+      const pill = $(".pill");
+      if(!pill) return;
+      const d = new Date(store.meta.updatedAt);
+      pill.title = "Last saved: " + d.toLocaleString();
+      pill.innerHTML = `<span aria-hidden="true">💾</span><span><b>Saved</b> ${d.toLocaleDateString()}</span>`;
+    }
+
+    function setActiveNav(route){
+      $$("#nav a").forEach(a=>{
+        a.classList.toggle("active", a.dataset.route === route);
+      });
+    }
+
+    function setTitle(title, sub){
+      $("#pageTitle").textContent = title;
+      $("#pageSub").textContent = sub;
+      document.title = `CarbonCue — ${title}`;
+    }
+
+    function destroyCharts(){
+      charts.forEach(c=>{ try{c.destroy()}catch(e){} });
+      charts = [];
+    }
+
+    function renderDashboard(){
+      const filtered = entriesFiltered({q: $("#globalSearch").value});
+      setTitle("Dashboard", "Unified emissions view + trends + cues that tell you what to do next.");
+      const cueCards = makeCueCards(filtered);
+
+      const hint = `
+        <div class="hint">
+          <div aria-hidden="true">✨</div>
+          <div>
+            CarbonCue isn't a static dashboard. Every number is computed live from your saved activity logs and your chosen emission factors.<small>Tip: Use <span class="mono">Settings → Emission Factors</span> to match your region, then import bills via CSV.</small>
+          </div>
+        </div>
+      `;
+
+      const body = `
+        ${hint}
+        <div style="height:12px"></div>
+        ${cueCards}
+        <div style="height:14px"></div>
+
+        <div class="grid cols2">
+          <div class="card">
+            <div class="row" style="justify-content:space-between; align-items:flex-start">
+              <div>
+                <h3>Emissions trend</h3>
+                <div class="help">Monthly total based on logged entries.</div>
+              </div>
+              <div class="row">
+                <button class="btn small" id="exportFilteredCsv">Export CSV</button>
+                <button class="btn small" id="exportFilteredJson">Export JSON</button>
+              </div>
+            </div>
+            <canvas id="chartTrend" height="130"></canvas>
+          </div>
+
+          <div class="card">
+            <h3>Breakdown</h3>
+            <div class="help">Where your emissions are coming from (category share).</div>
+            <canvas id="chartBreakdown" height="130"></canvas>
+          </div>
+        </div>
+
+        <div style="height:14px"></div>
+
+        <div class="grid cols2">
+          <div class="card">
+            <h3>Departments</h3>
+            <div class="help">Top emitting departments (based on your tagging).</div>
+            <canvas id="chartDept" height="140"></canvas>
+          </div>
+
+          <div class="card">
+            <h3>Latest entries</h3>
+            ${latestEntriesTable(filtered)}
+          </div>
+        </div>
+      `;
+
+      $("#page").innerHTML = body;
+
+      $("#exportFilteredCsv").onclick = ()=>{
+        const rows = filtered.map(e => entryToCsvRow(e));
+        download(`carboncue_export_${todayISO()}.csv`, toCsv(rows), "text/csv");
+        toast("Export ready", "Downloaded CSV of filtered entries.", "ok");
+      };
+      $("#exportFilteredJson").onclick = ()=>{
+        download(`carboncue_export_${todayISO()}.json`, JSON.stringify({org: store.org, factors: store.factors, entries: filtered}, null, 2), "application/json");
+        toast("Export ready", "Downloaded JSON of filtered entries.", "ok");
+      };
+
+      destroyCharts();
+      const trend = groupByMonth(filtered);
+      const breakdown = breakdownByCategory(filtered);
+      const dept = breakdownByDepartment(filtered);
+
+      charts.push(new Chart($("#chartTrend"), {
+        type: "line",
+        data: { labels: trend.labels, datasets: [{ label:"kgCO₂e", data: trend.values, tension:.35 }]},
+        options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{y:{ticks:{callback:(v)=>fmt0.format(v)}}}}
+      }));
+      charts.push(new Chart($("#chartBreakdown"), {
+        type: "doughnut",
+        data: { labels: breakdown.labels, datasets: [{ data: breakdown.values }]},
+        options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{position:"bottom"}}}
+      }));
+      charts.push(new Chart($("#chartDept"), {
+        type: "bar",
+        data: { labels: dept.labels.slice(0,8), datasets: [{ label:"kgCO₂e", data: dept.values.slice(0,8) }]},
+        options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{y:{ticks:{callback:(v)=>fmt0.format(v)}}}}
+      }));
+    }
+
+    function latestEntriesTable(entries){
+      if(!entries.length){
+        return `<div class="empty">
+          <h4>No entries yet</h4>
+          <p>Go to <b>Data Upload</b> and log electricity/fuel/waste. Then come back for charts + cues.</p>
+        </div>`;
+      }
+      const top = entries.slice(0,8);
+      return `
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Date</th><th>Dept</th><th>Category</th><th class="right">Emissions</th><th></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${top.map(e=>{
+              const disp = kgToDisplay(e.emissionsKg||0);
+              return `<tr>
+                <td class="mono">${escapeHtml(e.date)}</td>
+                <td>${escapeHtml(e.department)}</td>
+                <td>${escapeHtml(e.category)}</td>
+                <td class="right"><b>${fmt.format(disp.v)}</b> <span class="muted">${disp.u}</span></td>
+                <td class="right"><button class="btn small" data-edit="${e.id}">Edit</button></td>
+              </tr>`;
+            }).join("")}
+          </tbody>
+        </table>
+      `;
+    }
+
+    function entryToCsvRow(e){
+      const f = e.customFactorKgPerUnit != null && e.customFactorKgPerUnit !== "" ? Number(e.customFactorKgPerUnit) : (store.factors[e.factorId]?.kgPerUnit ?? "");
+      return {
+        date: e.date,
+        department: e.department,
+        category: e.category,
+        activity_label: e.activityLabel,
+        activity_value: e.activityValue,
+        activity_unit: e.activityUnit,
+        factor_kg_per_unit: f,
+        scope: e.scope,
+        notes: e.notes
+      };
+    }
+
+    function toCsv(rows){
+      const headers = Object.keys(rows[0] || {date:"",department:"",category:"",activity_label:"",activity_value:"",activity_unit:"",factor_kg_per_unit:"",scope:"",notes:""});
+      const esc = (v)=>{
+        const s = String(v ?? "");
+        if(/[,"\n\r]/.test(s)) return `"${s.replaceAll('"','""')}"`;
+        return s;
+      };
+      const lines = [headers.join(",")].concat(rows.map(r => headers.map(h=>esc(r[h])).join(",")));
+      return lines.join("\n");
+    }
+
+    function renderData(){
+      setTitle("Data Upload", "Add entries, import CSV, edit records — everything updates the dashboard instantly.");
+      const body = `
+        <div class="split">
+          <div class="card">
+            <h3>Add activity</h3>
+            <div class="help">Log one activity (electricity, fuel, waste, etc.). Emissions are calculated instantly.</div>
+            <div style="height:12px"></div>
+
+            <form id="entryForm" class="grid cols2">
+              <div class="field">
+                <label>Date</label>
+                <input class="input" type="date" name="date" value="${todayISO()}" required />
+              </div>
+              <div class="field">
+                <label>Department</label>
+                <select name="department" required>
+                  ${store.departments.map(d=>`<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join("")}
+                </select>
+              </div>
+
+              <div class="field">
+                <label>Category</label>
+                <select name="category" id="catSel" required>
+                  ${["Electricity","Transport","Stationary","Waste","Supply Chain"].map(c=>`<option value="${c}">${c}</option>`).join("")}
+                </select>
+              </div>
+              <div class="field">
+                <label>Activity name</label>
+                <input class="input" name="activityLabel" placeholder="e.g., Office electricity bill / Diesel for fleet" required />
+              </div>
+
+              <div class="field">
+                <label>Activity value</label>
+                <input class="input" type="number" name="activityValue" step="0.0001" min="0" required />
+              </div>
+              <div class="field">
+                <label>Unit</label>
+                <input class="input" name="activityUnit" value="kWh" placeholder="kWh, L, m³, kg, km…" required />
+              </div>
+
+              <div class="field" style="grid-column:1 / -1">
+                <label>Emission factor</label>
+                <div class="row">
+                  <select name="factorId" id="factorSel" style="flex:1">
+                    ${factorOptionsHtml()}
+                  </select>
+                  <button type="button" class="btn small" id="addFactorBtn">+ Custom factor</button>
+                </div>
+                <div class="help">If your activity doesn't match a preset factor, add a custom factor (kgCO₂e per unit).</div>
+              </div>
+
+              <div class="field" style="grid-column:1 / -1">
+                <label>Or override with custom factor (kgCO₂e per unit)</label>
+                <input class="input" name="customFactorKgPerUnit" placeholder="Leave blank to use selected factor" />
+              </div>
+
+              <div class="field" style="grid-column:1 / -1">
+                <label>Notes</label>
+                <textarea name="notes" placeholder="Optional: meter id, bill no, route details, etc."></textarea>
+              </div>
+
+              <div class="row" style="grid-column:1 / -1; justify-content:flex-end">
+                <button type="button" class="btn" id="clearBtn">Clear</button>
+                <button class="btn primary" type="submit">Add entry</button>
+              </div>
+            </form>
+          </div>
+
+          <div class="card">
+            <h3>Bulk import (CSV)</h3>
+            <div class="help">Drop a CSV, preview rows, then import. No more fake placeholders.</div>
+            <div style="height:10px"></div>
+
+            <div class="row">
+              <button class="btn small" id="downloadTemplate">Download template</button>
+              <label class="btn small" for="csvFile" style="cursor:pointer">Choose CSV</label>
+              <input id="csvFile" type="file" accept=".csv,text/csv" style="display:none" />
+            </div>
+
+            <div style="height:12px"></div>
+            <div id="csvPreview" class="empty">
+              <h4>Import your bills/logs</h4>
+              <p>Accepted columns: <span class="mono">date, department, category, activity_label, activity_value, activity_unit, factor_kg_per_unit, scope, notes</span></p>
+            </div>
+
+            <div style="height:12px"></div>
+            <h3>Entries</h3>
+            <div class="help">Edit or delete — everything is live.</div>
+            <div style="height:10px"></div>
+            <div style="max-height:360px; overflow:auto">
+              ${entriesListHtml(entriesFiltered({q: $("#globalSearch").value}).slice(0, 40))}
+            </div>
+          </div>
+        </div>
+      `;
+      $("#page").innerHTML = body;
+
+      const form = $("#entryForm");
+      const catSel = $("#catSel");
+      const factorSel = $("#factorSel");
+
+      function syncFactorByCat(){
+        const unit = form.activityUnit.value;
+        const fId = defaultFactorFor(catSel.value, unit);
+        if(fId && store.factors[fId]) factorSel.value = fId;
+      }
+      catSel.onchange = syncFactorByCat;
+      form.activityUnit.oninput = syncFactorByCat;
+
+      $("#addFactorBtn").onclick = ()=> openFactorModal({after: ()=>{ render(); }});
+
+      $("#clearBtn").onclick = ()=>{
+        form.reset();
+        form.date.value = todayISO();
+        form.activityUnit.value = "kWh";
+        factorSel.value = store.org.gridFactorId || "grid_india_cea_2023_24";
+      };
+
+      form.onsubmit = (e)=>{
+        e.preventDefault();
+        const fd = new FormData(form);
+        const entry = Object.fromEntries(fd.entries());
+        if(Number(entry.activityValue) < 0 || !Number.isFinite(Number(entry.activityValue))){
+          toast("Invalid value", "Activity value must be a non-negative number.", "danger");
+          return;
+        }
+        addEntry(entry);
+      };
+
+      $("#downloadTemplate").onclick = ()=>{
+        const template = toCsv([{
+          date: todayISO(),
+          department: store.departments[0] || "Operations",
+          category: "Electricity",
+          activity_label: "Office electricity bill",
+          activity_value: 1200,
+          activity_unit: "kWh",
+          factor_kg_per_unit: store.factors[store.org.gridFactorId]?.kgPerUnit ?? 0.727,
+          scope: "Scope 2",
+          notes: "Add your notes"
+        }]);
+        download("carboncue_template.csv", template, "text/csv");
+      };
+
+      $("#csvFile").onchange = async (e)=>{
+        const file = e.target.files?.[0];
+        if(!file) return;
+        const text = await file.text();
+        const rows = parseCSV(text);
+        if(!rows.length){
+          toast("CSV error", "No rows found. Check formatting.", "danger");
+          return;
+        }
+        const mapped = rows.slice(0, 300).map(r => mapCsvRow(r)).filter(Boolean);
+        showImportPreview(mapped);
+      };
+
+      $("#page").addEventListener("click", (e)=>{
+        const editBtn = e.target.closest("[data-edit]");
+        const delBtn = e.target.closest("[data-del]");
+        if(editBtn){
+          const id = editBtn.dataset.edit;
+          const entry = store.entries.find(x=>x.id===id);
+          if(entry) openEntryEditModal(entry);
+        }
+        if(delBtn){
+          const id = delBtn.dataset.del;
+          openModal({
+            title: "Delete entry?",
+            bodyHtml: `<p class="help">This removes the entry permanently from your local storage.</p>`,
+            footerHtml: `<button class="btn" id="cancelDel">Cancel</button><button class="btn danger" id="confirmDel">Delete</button>`,
+            onMount: ()=>{
+              $("#cancelDel").onclick = closeModal;
+              $("#confirmDel").onclick = ()=>{ closeModal(); deleteEntry(id); };
+            }
+          });
+        }
+      });
+    }
+
+    function mapCsvRow(r){
+      const g = (k)=> r[k] ?? r[k.toLowerCase()] ?? r[k.toUpperCase()];
+      const date = String(g("date") ?? "").trim() || todayISO();
+      const department = String(g("department") ?? "").trim() || store.departments[0] || "Operations";
+      const category = normalizeCategory(g("category") ?? "");
+      const activityLabel = String(g("activity_label") ?? g("activity") ?? g("label") ?? "Activity").trim();
+      const activityValue = Number(String(g("activity_value") ?? g("value") ?? "0").trim());
+      const activityUnit = String(g("activity_unit") ?? g("unit") ?? "kWh").trim();
+      const factorFromCsv = g("factor_kg_per_unit");
+      const scope = String(g("scope") ?? "").trim();
+      const notes = String(g("notes") ?? "").trim();
+
+      if(!Number.isFinite(activityValue)){
+        return null;
+      }
+
+      let factorId = defaultFactorFor(category, activityUnit);
+      let customFactorKgPerUnit = "";
+      if(factorFromCsv != null && String(factorFromCsv).trim() !== ""){
+        customFactorKgPerUnit = String(factorFromCsv).trim();
+        factorId = factorId || "";
+      }
+      return { date, department, category, activityLabel, activityValue, activityUnit, factorId, customFactorKgPerUnit, scope, notes };
+    }
+
+    function showImportPreview(mapped){
+      const target = $("#csvPreview");
+      target.classList.remove("empty");
+      target.innerHTML = `
+        <div class="row" style="justify-content:space-between">
+          <div>
+            <b>Preview</b> <span class="muted">(${mapped.length} rows ready)</span>
+            <div class="help">We auto-match known factors. Unknowns can use factor_kg_per_unit from CSV or be edited later.</div>
+          </div>
+          <div class="row">
+            <button class="btn small" id="importBtn">Import</button>
+            <button class="btn small" id="cancelImport">Cancel</button>
+          </div>
+        </div>
+        <div style="height:10px"></div>
+        <div style="max-height:240px; overflow:auto">
+          <table class="table">
+            <thead><tr><th>Date</th><th>Dept</th><th>Category</th><th>Activity</th><th class="right">Value</th><th>Unit</th><th class="right">kgCO₂e</th></tr></thead>
+            <tbody>
+              ${mapped.slice(0,10).map(m=>{
+                const tmp = { ...m, emissionsKg: computeEntryEmissions(m) };
+                return `<tr>
+                  <td class="mono">${escapeHtml(m.date)}</td>
+                  <td>${escapeHtml(m.department)}</td>
+                  <td>${escapeHtml(m.category)}</td>
+                  <td>${escapeHtml(m.activityLabel)}</td>
+                  <td class="right">${fmt.format(m.activityValue)}</td>
+                  <td>${escapeHtml(m.activityUnit)}</td>
+                  <td class="right"><b>${fmt.format(tmp.emissionsKg)}</b></td>
+                </tr>`;
+              }).join("")}
+            </tbody>
+          </table>
+        </div>
+      `;
+      $("#importBtn").onclick = ()=>{
+        mapped.forEach(m => addEntry(m));
+        toast("Import complete", `Imported ${mapped.length} rows.`, "ok");
+        render();
+      };
+      $("#cancelImport").onclick = ()=>{
+        $("#csvPreview").innerHTML = `<div class="empty">
+          <h4>Import your bills/logs</h4>
+          <p>Accepted columns: <span class="mono">date, department, category, activity_label, activity_value, activity_unit, factor_kg_per_unit, scope, notes</span></p>
+        </div>`;
+      };
+    }
+
+    function entriesListHtml(entries){
+      if(!entries.length){
+        return `<div class="empty"><h4>Nothing logged yet</h4><p>Use the form on the left or import CSV.</p></div>`;
+      }
+      return `
+        <table class="table">
+          <thead>
+            <tr><th>Date</th><th>Category</th><th class="right">kgCO₂e</th><th></th></tr>
+          </thead>
+          <tbody>
+            ${entries.map(e=>{
+              return `<tr>
+                <td class="mono">${escapeHtml(e.date)}</td>
+                <td>
+                  <b>${escapeHtml(e.category)}</b><div class="help">${escapeHtml(e.activityLabel)}</div>
+                  <div class="help">${escapeHtml(e.department)} • ${escapeHtml(e.scope || "")}</div>
+                </td>
+                <td class="right"><b>${fmt.format(e.emissionsKg||0)}</b></td>
+                <td class="right">
+                  <div class="row" style="justify-content:flex-end">
+                    <button class="btn small" data-edit="${e.id}">Edit</button>
+                    <button class="btn small danger" data-del="${e.id}">Delete</button>
+                  </div>
+                </td>
+              </tr>`;
+            }).join("")}
+          </tbody>
+        </table>
+      `;
+    }
+
+    function openEntryEditModal(entry){
+      const f = store.factors[entry.factorId];
+      openModal({
+        title: "Edit entry",
+        bodyHtml: `
+          <div class="grid cols2">
+            <div class="field">
+              <label>Date</label>
+              <input class="input" id="ed_date" type="date" value="${escapeHtml(entry.date)}" />
+            </div>
+            <div class="field">
+              <label>Department</label>
+              <select id="ed_department">
+                ${store.departments.map(d=>`<option value="${escapeHtml(d)}" ${d===entry.department?"selected":""}>${escapeHtml(d)}</option>`).join("")}
+              </select>
+            </div>
+
+            <div class="field">
+              <label>Category</label>
+              <select id="ed_category">
+                ${["Electricity","Transport","Stationary","Waste","Supply Chain"].map(c=>`<option value="${c}" ${normalizeCategory(entry.category)===c?"selected":""}>${c}</option>`).join("")}
+              </select>
+            </div>
+            <div class="field">
+              <label>Activity name</label>
+              <input class="input" id="ed_label" value="${escapeHtml(entry.activityLabel)}" />
+            </div>
+
+            <div class="field">
+              <label>Value</label>
+              <input class="input" id="ed_value" type="number" step="0.0001" min="0" value="${escapeHtml(entry.activityValue)}" />
+            </div>
+            <div class="field">
+              <label>Unit</label>
+              <input class="input" id="ed_unit" value="${escapeHtml(entry.activityUnit)}" />
+            </div>
+
+            <div class="field" style="grid-column:1/-1">
+              <label>Factor</label>
+              <select id="ed_factor">
+                ${factorOptionsHtml(entry.factorId)}
+              </select>
+              <div class="help">Preset: <span class="mono">${escapeHtml(f?.name || "—")}</span> • Source: <span class="mono">${escapeHtml(f?.source || "—")}</span></div>
+            </div>
+
+            <div class="field" style="grid-column:1/-1">
+              <label>Custom factor override (kgCO₂e per unit)</label>
+              <input class="input" id="ed_custom" value="${escapeHtml(entry.customFactorKgPerUnit ?? "")}" placeholder="Leave blank to use preset factor" />
+            </div>
+
+            <div class="field">
+              <label>Scope</label>
+              <select id="ed_scope">
+                ${["Scope 1","Scope 2","Scope 3"].map(s=>`<option value="${s}" ${entry.scope===s?"selected":""}>${s}</option>`).join("")}
+              </select>
+            </div>
+
+            <div class="field" style="grid-column:1/-1">
+              <label>Notes</label>
+              <textarea id="ed_notes">${escapeHtml(entry.notes||"")}</textarea>
+            </div>
+          </div>
+          <div style="height:10px"></div>
+          <div class="hint"><div aria-hidden="true">🧮</div><div>
+            Emissions update instantly on save: <span class="mono">activity_value × emission_factor</span>.
+            <small>Need a new factor? Go to Settings → Emission Factors or add one from Data Upload.</small>
+          </div></div>
+        `,
+        footerHtml: `
+          <button class="btn" id="ed_cancel">Cancel</button>
+          <button class="btn primary" id="ed_save">Save</button>
+        `,
+        onMount: ()=>{
+          $("#ed_cancel").onclick = closeModal;
+          $("#ed_save").onclick = ()=>{
+            const patch = {
+              date: $("#ed_date").value,
+              department: $("#ed_department").value,
+              category: $("#ed_category").value,
+              activityLabel: $("#ed_label").value,
+              activityValue: Number($("#ed_value").value),
+              activityUnit: $("#ed_unit").value,
+              factorId: $("#ed_factor").value,
+              customFactorKgPerUnit: $("#ed_custom").value,
+              scope: $("#ed_scope").value,
+              notes: $("#ed_notes").value
+            };
+            if(!Number.isFinite(patch.activityValue) || patch.activityValue < 0){
+              toast("Invalid value", "Activity value must be a non-negative number.", "danger");
+              return;
+            }
+            closeModal();
+            updateEntry(entry.id, patch);
+          };
+        }
+      });
+    }
+
+    function factorOptionsHtml(selectedId=""){
+      const groups = {};
+      for(const f of Object.values(store.factors)){
+        const cat = normalizeCategory(f.category);
+        groups[cat] ||= [];
+        groups[cat].push(f);
+      }
+      const cats = Object.keys(groups).sort();
+      return cats.map(cat=>{
+        const opts = groups[cat].sort((a,b)=>a.name.localeCompare(b.name)).map(f=>{
+          const sel = f.id === selectedId ? "selected" : "";
+          return `<option value="${escapeHtml(f.id)}" ${sel}>${escapeHtml(f.name)} • ${fmt4.format(f.kgPerUnit)} kg/${escapeHtml(f.unit)}</option>`;
+        }).join("");
+        return `<optgroup label="${escapeHtml(cat)}">${opts}</optgroup>`;
+      }).join("");
+    }
+
+    function openFactorModal({after}){
+      openModal({
+        title: "Add custom emission factor",
+        bodyHtml: `
+          <div class="grid cols2">
+            <div class="field">
+              <label>Name</label>
+              <input class="input" id="f_name" placeholder="e.g., Waste to landfill (mixed)" />
+            </div>
+            <div class="field">
+              <label>Category</label>
+              <select id="f_category">
+                ${["Electricity","Transport","Stationary","Waste","Supply Chain"].map(c=>`<option value="${c}">${c}</option>`).join("")}
+              </select>
+            </div>
+            <div class="field">
+              <label>Unit</label>
+              <input class="input" id="f_unit" placeholder="kWh, L, kg, km, ₹, $" />
+            </div>
+            <div class="field">
+              <label>kgCO₂e per unit</label>
+              <input class="input" id="f_kg" type="number" step="0.0000001" min="0" placeholder="e.g., 0.12" />
+            </div>
+            <div class="field" style="grid-column:1/-1">
+              <label>Source / reference</label>
+              <input class="input" id="f_source" placeholder="e.g., DEFRA 2025 conversion factors, supplier EF sheet, audit report…" />
+              <div class="help">For hackathons: always note what standard/source you used (EPA / IPCC / DEFRA / CEA / supplier).</div>
+            </div>
+            <div class="field">
+              <label>Default scope</label>
+              <select id="f_scope">
+                ${["Scope 1","Scope 2","Scope 3"].map(s=>`<option value="${s}">${s}</option>`).join("")}
+              </select>
+            </div>
+          </div>
+          <div style="height:10px"></div>
+          <div class="hint"><div aria-hidden="true">🧠</div><div>
+            This is how you avoid fake data: use real factors and let users update them.
+            <small>CarbonCue stores the factor and applies it automatically to future entries.</small>
+          </div></div>
+        `,
+        footerHtml: `
+          <button class="btn" id="f_cancel">Cancel</button>
+          <button class="btn primary" id="f_save">Save factor</button>
+        `,
+        onMount: ()=>{
+          $("#f_cancel").onclick = closeModal;
+          $("#f_save").onclick = ()=>{
+            const name = $("#f_name").value.trim();
+            const unit = $("#f_unit").value.trim();
+            const kg = Number($("#f_kg").value);
+            if(!name || !unit || !Number.isFinite(kg) || kg < 0){
+              toast("Missing fields", "Enter name, unit, and a valid non-negative kg/unit.", "danger");
+              return;
+            }
+            const id = "custom_" + uid();
+            store.factors[id] = {
+              id,
+              name,
+              category: $("#f_category").value,
+              unit,
+              kgPerUnit: kg,
+              source: $("#f_source").value.trim() || "Custom factor (user-provided)",
+              scopeDefault: $("#f_scope").value
+            };
+            saveStore();
+            closeModal();
+            toast("Factor added", "Custom emission factor saved.", "ok");
+            if(typeof after === "function") after();
+          };
+        }
+      });
+    }
+
+    function renderReports(){
+      setTitle("Reports", "Generate auditor-friendly summaries, export files, and print a clean report.");
+      const from = todayISO().slice(0,8) + "01";
+      const to = todayISO();
+      const body = `
+        <div class="card">
+          <div class="row" style="justify-content:space-between; align-items:flex-start">
+            <div>
+              <h3>Report builder</h3>
+              <div class="help">Filter entries and generate a clean summary for judges or reviewers.</div>
+            </div>
+            <div class="row">
+              <button class="btn small" id="printReport">Print</button>
+              <button class="btn small" id="exportReportCsv">Export CSV</button>
+              <button class="btn small" id="exportReportJson">Export JSON</button>
+            </div>
+          </div>
+
+          <div style="height:12px"></div>
+
+          <div class="grid cols3">
+            <div class="field">
+              <label>From</label>
+              <input class="input" id="rep_from" type="date" value="${from}" />
+            </div>
+            <div class="field">
+              <label>To</label>
+              <input class="input" id="rep_to" type="date" value="${to}" />
+            </div>
+            <div class="field">
+              <label>Category</label>
+              <select id="rep_cat">
+                ${["All","Electricity","Transport","Stationary","Waste","Supply Chain"].map(c=>`<option value="${c}">${c}</option>`).join("")}
+              </select>
+            </div>
+            <div class="field">
+              <label>Department</label>
+              <select id="rep_dep">
+                <option>All</option>
+                ${store.departments.map(d=>`<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join("")}
+              </select>
+            </div>
+            <div class="field">
+              <label>Scope</label>
+              <select id="rep_scope">
+                ${["All","Scope 1","Scope 2","Scope 3"].map(s=>`<option value="${s}">${s}</option>`).join("")}
+              </select>
+            </div>
+            <div class="field">
+              <label>Search</label>
+              <input class="input" id="rep_q" placeholder="e.g., diesel, bill, route, meter…" />
+            </div>
+          </div>
+
+          <div style="height:14px"></div>
+
+          <div id="reportOut"></div>
+        </div>
+      `;
+      $("#page").innerHTML = body;
+
+      const recompute = ()=>{
+        const entries = entriesFiltered({
+          q: $("#rep_q").value,
+          from: $("#rep_from").value,
+          to: $("#rep_to").value,
+          category: $("#rep_cat").value,
+          department: $("#rep_dep").value,
+          scope: $("#rep_scope").value
+        });
+        const total = entries.reduce((s,e)=>s+(Number(e.emissionsKg)||0),0);
+        const disp = kgToDisplay(total);
+        const byCat = breakdownByCategory(entries);
+        const byDep = breakdownByDepartment(entries);
+        const topFactorNotes = extractFactorNotes(entries);
+        $("#reportOut").innerHTML = `
+          <div id="printArea">
+            <div class="grid cols2">
+              <div class="card" style="box-shadow:none">
+                <h3>Summary</h3>
+                <div class="row" style="justify-content:space-between">
+                  <div>
+                    <div class="num" style="font-size:26px;font-weight:1000">${fmt.format(disp.v)} <span class="muted" style="font-size:12px">${disp.u}</span></div>
+                    <div class="help">Total emissions for this report</div>
+                  </div>
+                  <span class="badge warn">${entries.length} entries</span>
+                </div>
+                <div style="height:10px"></div>
+                <div class="help"><b>Organization:</b> ${escapeHtml(store.org.name)} • <b>Generated:</b> ${new Date().toLocaleString()}</div>
+              </div>
+
+              <div class="card" style="box-shadow:none">
+                <h3>Emission factor notes</h3>
+                <div class="help">This makes your submission credible: show the factor sources.</div>
+                <div style="height:10px"></div>
+                ${topFactorNotes}
+              </div>
+            </div>
+
+            <div style="height:12px"></div>
+
+            <div class="grid cols2">
+              <div class="card" style="box-shadow:none">
+                <h3>By category</h3>
+                ${simpleBarList(byCat.labels, byCat.values, total)}
+              </div>
+              <div class="card" style="box-shadow:none">
+                <h3>By department</h3>
+                ${simpleBarList(byDep.labels, byDep.values, total)}
+              </div>
+            </div>
+
+            <div style="height:12px"></div>
+
+            <div class="card" style="box-shadow:none">
+              <h3>Entries</h3>
+              ${reportTable(entries.slice(0, 200))}
+              <div class="help">Showing up to 200 rows for print. Export CSV for the full dataset.</div>
+            </div>
+          </div>
+        `;
+      };
+
+      ["rep_from","rep_to","rep_cat","rep_dep","rep_scope","rep_q"].forEach(id=>{
+        $("#"+id).addEventListener("input", recompute);
+        $("#"+id).addEventListener("change", recompute);
+      });
+
+      recompute();
+
+      $("#printReport").onclick = ()=>{
+        const html = $("#printArea").innerHTML;
+        const w = window.open("", "_blank");
+        w.document.write(`<html><head><title>CarbonCue Report</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font-family:${getComputedStyle(document.body).fontFamily};padding:18px;background:#fff;color:#111} table{width:100%;border-collapse:collapse} th,td{border:1px solid #e5e7eb;padding:8px;font-size:12px} th{background:#f8fafc;text-transform:uppercase;letter-spacing:.06em}</style></head><body>${html}</body></html>`);
+        w.document.close();
+        w.focus();
+        w.print();
+      };
+
+      $("#exportReportCsv").onclick = ()=>{
+        const entries = entriesFiltered({
+          q: $("#rep_q").value,
+          from: $("#rep_from").value,
+          to: $("#rep_to").value,
+          category: $("#rep_cat").value,
+          department: $("#rep_dep").value,
+          scope: $("#rep_scope").value
+        });
+        const rows = entries.map(e => entryToCsvRow(e));
+        download(`carboncue_report_${todayISO()}.csv`, toCsv(rows), "text/csv");
+        toast("Export ready", "Downloaded report CSV.", "ok");
+      };
+
+      $("#exportReportJson").onclick = ()=>{
+        const entries = entriesFiltered({
+          q: $("#rep_q").value,
+          from: $("#rep_from").value,
+          to: $("#rep_to").value,
+          category: $("#rep_cat").value,
+          department: $("#rep_dep").value,
+          scope: $("#rep_scope").value
+        });
+        download(`carboncue_report_${todayISO()}.json`, JSON.stringify({org: store.org, targets: store.targets, factors: store.factors, entries}, null, 2), "application/json");
+        toast("Export ready", "Downloaded report JSON.", "ok");
+      };
+    }
+
+    function simpleBarList(labels, values, total){
+      if(!labels.length) return `<div class="empty"><h4>No data</h4><p>Adjust filters or add entries.</p></div>`;
+      const max = Math.max(...values, 1);
+      return `
+        <div class="grid" style="gap:10px">
+          ${labels.slice(0,10).map((l,i)=>{
+            const v = values[i];
+            const pct = total ? (v/total)*100 : 0;
+            const w = (v/max)*100;
+            return `<div>
+              <div class="row" style="justify-content:space-between">
+                <b>${escapeHtml(l)}</b>
+                <span class="muted">${fmt.format(pct)}% • ${fmt.format(v)} kg</span>
+              </div>
+              <div style="height:8px;border-radius:999px;background:#f1f5f9;border:1px solid #e2e8f0;overflow:hidden">
+                <div style="height:100%; width:${w}%; background:linear-gradient(135deg, rgba(16,185,129,.85), rgba(14,165,163,.80))"></div>
+              </div>
+            </div>`;
+          }).join("")}
+        </div>
+      `;
+    }
+
+    function reportTable(entries){
+      if(!entries.length) return `<div class="empty"><h4>No entries</h4><p>Nothing to include in this report.</p></div>`;
+      return `
+        <table class="table">
+          <thead><tr>
+            <th>Date</th><th>Dept</th><th>Category</th><th>Activity</th><th class="right">Value</th><th>Unit</th><th class="right">kgCO₂e</th><th>Scope</th>
+          </tr></thead>
+          <tbody>
+            ${entries.map(e=>`<tr>
+              <td class="mono">${escapeHtml(e.date)}</td>
+              <td>${escapeHtml(e.department)}</td>
+              <td>${escapeHtml(e.category)}</td>
+              <td>${escapeHtml(e.activityLabel)}<div class="help">${escapeHtml(e.notes||"")}</div></td>
+              <td class="right">${fmt.format(e.activityValue)}</td>
+              <td>${escapeHtml(e.activityUnit)}</td>
+              <td class="right"><b>${fmt.format(e.emissionsKg||0)}</b></td>
+              <td>${escapeHtml(e.scope||"")}</td>
+            </tr>`).join("")}
+          </tbody>
+        </table>
+      `;
+    }
+
+    function extractFactorNotes(entries){
+      const used = new Map();
+      for(const e of entries){
+        const key = (e.customFactorKgPerUnit != null && e.customFactorKgPerUnit !== "")
+          ? `custom:${e.customFactorKgPerUnit}:${e.activityUnit}`
+          : `preset:${e.factorId}`;
+        used.set(key, (used.get(key)||0) + (Number(e.emissionsKg)||0));
+      }
+      const items = Array.from(used.entries()).sort((a,b)=>b[1]-a[1]).slice(0,6);
+      if(!items.length) return `<div class="empty"><h4>No factors used</h4><p>Add entries to populate.</p></div>`;
+      return `<div class="grid" style="gap:10px">
+        ${items.map(([k,kg])=>{
+          if(k.startsWith("preset:")){
+            const id = k.split(":")[1];
+            const f = store.factors[id];
+            return `<div class="card" style="padding:12px;box-shadow:none">
+              <div class="row" style="justify-content:space-between">
+                <b>${escapeHtml(f?.name || id)}</b>
+                <span class="badge warn">${fmt.format(kg)} kg</span>
+              </div>
+              <div class="help">Factor: <span class="mono">${fmt4.format(f?.kgPerUnit ?? 0)} kg/${escapeHtml(f?.unit || "")}</span></div>
+              <div class="help">Source: <span class="mono">${escapeHtml(f?.source || "—")}</span></div>
+            </div>`;
+          }
+          const parts = k.split(":");
+          const fVal = parts[1];
+          const unit = parts[2];
+          return `<div class="card" style="padding:12px;box-shadow:none">
+            <div class="row" style="justify-content:space-between">
+              <b>Custom factor</b>
+              <span class="badge warn">${fmt.format(kg)} kg</span>
+            </div>
+            <div class="help">Factor: <span class="mono">${escapeHtml(fVal)} kg/${escapeHtml(unit)}</span></div>
+            <div class="help">Source: <span class="mono">Provided in CSV or entry override</span></div>
+          </div>`;
+        }).join("")}
+      </div>`;
+    }
+
+    function renderCues(){
+      setTitle("Action Cues", "Auto-generated next steps based on your data (and you can track adoption).");
+      const filtered = entriesFiltered({q: $("#globalSearch").value});
+      const cues = cuesFor(filtered);
+
+      const body = `
+        <div class="grid cols2">
+          <div class="card">
+            <h3>Recommended actions</h3>
+            <div class="help">These are generated from your emission profile — no hardcoded generic “tips”.</div>
+            <div style="height:12px"></div>
+            <div class="grid" style="gap:12px">
+              ${cues.map(c => cueCardHtml(c)).join("")}
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>Adoption tracker</h3>
+            <div class="help">Mark actions adopted, add notes, then watch MoM on the Dashboard.</div>
+            <div style="height:12px"></div>
+            ${adoptionHtml()}
+          </div>
+        </div>
+      `;
+
+      $("#page").innerHTML = body;
+
+      $("#page").addEventListener("click", (e)=>{
+        const adopt = e.target.closest("[data-adopt]");
+        const unadopt = e.target.closest("[data-unadopt]");
+        if(adopt){
+          const id = adopt.dataset.adopt;
+          const cue = cues.find(c=>c.id===id);
+          if(!cue) return;
+          openModal({
+            title: "Mark adopted",
+            bodyHtml: `
+              <div class="help">Add a short note — this is what makes your hackathon story measurable.</div>
+              <div style="height:10px"></div>
+              <div class="field">
+                <label>What did you change?</label>
+                <textarea id="ad_note" placeholder="e.g., Switched 60% lighting to LED; added HVAC schedule; reduced idling…"></textarea>
+              </div>
+            `,
+            footerHtml: `<button class="btn" id="ad_cancel">Cancel</button><button class="btn primary" id="ad_save">Save</button>`,
+            onMount: ()=>{
+              $("#ad_cancel").onclick = closeModal;
+              $("#ad_save").onclick = ()=>{
+                const note = $("#ad_note").value.trim();
+                store.adoptedActions.unshift({ id: uid(), cueId: cue.id, title: cue.title, adoptedAt: new Date().toISOString(), note });
+                saveStore();
+                closeModal();
+                toast("Adopted!", "Action recorded. Check Dashboard MoM next month.", "ok");
+                render();
+              };
+            }
+          });
+        }
+        if(unadopt){
+          const id = unadopt.dataset.unadopt;
+          store.adoptedActions = store.adoptedActions.filter(a=>a.id!==id);
+          saveStore();
+          toast("Removed", "Adoption entry deleted.", "warn");
+          render();
+        }
+      });
+    }
+
+    function cueCardHtml(c){
+      const adopted = store.adoptedActions.some(a=>a.cueId===c.id);
+      const badge = c.impact === "High" ? "ok" : c.impact === "Medium" ? "warn" : "danger";
+      return `
+        <div class="card" style="padding:14px">
+          <div class="row" style="justify-content:space-between; align-items:flex-start">
+            <div>
+              <b>${escapeHtml(c.title)}</b>
+              <div class="help">${escapeHtml(c.why)}</div>
+            </div>
+            <div class="row">
+              <span class="badge ${badge}">${escapeHtml(c.impact)} impact</span>
+              <span class="badge warn">${escapeHtml(c.effort)} effort</span>
+            </div>
+          </div>
+          <div style="height:10px"></div>
+          <div class="help"><b>Steps</b></div>
+          <ul class="help" style="margin:6px 0 0 18px; padding:0; line-height:1.5">
+            ${c.steps.map(s=>`<li>${escapeHtml(s)}</li>`).join("")}
+          </ul>
+          <div style="height:12px"></div>
+          <div class="row" style="justify-content:flex-end">
+            ${adopted ? `<span class="badge ok">Adopted</span>` : `<button class="btn primary small" data-adopt="${escapeHtml(c.id)}">Mark adopted</button>`}
+          </div>
+        </div>
+      `;
+    }
+
+    function adoptionHtml(){
+      if(!store.adoptedActions.length){
+        return `<div class="empty"><h4>No actions adopted yet</h4><p>Pick a cue on the left and mark it adopted — it boosts your Cue Score.</p></div>`;
+      }
+      return `
+        <table class="table">
+          <thead><tr><th>Action</th><th>When</th><th></th></tr></thead>
+          <tbody>
+            ${store.adoptedActions.slice(0,12).map(a=>`<tr>
+              <td><b>${escapeHtml(a.title)}</b><div class="help">${escapeHtml(a.note||"")}</div></td>
+              <td class="mono">${escapeHtml(new Date(a.adoptedAt).toISOString().slice(0,10))}</td>
+              <td class="right"><button class="btn small danger" data-unadopt="${escapeHtml(a.id)}">Remove</button></td>
+            </tr>`).join("")}
+          </tbody>
+        </table>
+      `;
+    }
+
+    function renderSettings(){
+      setTitle("Settings", "Configure org details, factors, departments, targets, and backups.");
+      const gridFactor = store.factors[store.org.gridFactorId];
+      const body = `
+        <div class="grid cols2">
+          <div class="card">
+            <h3>Organization</h3>
+            <div class="help">These labels appear in reports/exports.</div>
+            <div style="height:12px"></div>
+            <div class="grid cols2">
+              <div class="field">
+                <label>Name</label>
+                <input class="input" id="org_name" value="${escapeHtml(store.org.name)}" />
+              </div>
+              <div class="field">
+                <label>Currency</label>
+                <select id="org_currency">
+                  ${["INR","USD","EUR","GBP"].map(c=>`<option value="${c}" ${store.org.currency===c?"selected":""}>${c}</option>`).join("")}
+                </select>
+              </div>
+
+              <div class="field" style="grid-column:1/-1">
+                <label>Grid electricity factor (Scope 2)</label>
+                <select id="org_gridFactor">
+                  ${factorOptionsHtml(store.org.gridFactorId)}
+                </select>
+                <div class="help">Current: <span class="mono">${escapeHtml(gridFactor?.name || "—")} • ${fmt4.format(gridFactor?.kgPerUnit||0)} kg/${escapeHtml(gridFactor?.unit||"")}</span></div>
+              </div>
+            </div>
+
+            <div style="height:12px"></div>
+            <button class="btn primary" id="saveOrg">Save</button>
+          </div>
+
+          <div class="card">
+            <h3>Targets</h3>
+            <div class="help">Optional. Used for goal badges and judge-friendly storytelling.</div>
+            <div style="height:12px"></div>
+            <div class="grid cols2">
+              <div class="field">
+                <label>Monthly target (kgCO₂e)</label>
+                <input class="input" id="t_month" type="number" min="0" step="0.01" value="${store.targets.monthlyKg ?? ""}" placeholder="e.g., 25000" />
+              </div>
+              <div class="field">
+                <label>Annual target (kgCO₂e)</label>
+                <input class="input" id="t_year" type="number" min="0" step="0.01" value="${store.targets.annualKg ?? ""}" placeholder="e.g., 300000" />
+              </div>
+            </div>
+            <div style="height:12px"></div>
+            <button class="btn primary" id="saveTargets">Save</button>
+          </div>
+
+          <div class="card">
+            <h3>Departments</h3>
+            <div class="help">Used for breakdowns and heatmaps.</div>
+            <div style="height:12px"></div>
+            <div class="row">
+              <input class="input" id="dep_new" placeholder="Add department name…" style="flex:1" />
+              <button class="btn small" id="dep_add">Add</button>
+            </div>
+            <div style="height:12px"></div>
+            <div class="grid" style="gap:10px">
+              ${store.departments.map(d=>`
+                <div class="row" style="justify-content:space-between">
+                  <span><b>${escapeHtml(d)}</b></span>
+                  <button class="btn small danger" data-dep-del="${escapeHtml(d)}">Remove</button>
+                </div>
+              `).join("")}
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>Emission Factors</h3>
+            <div class="help">Edit presets or add custom ones — the platform stays transparent.</div>
+            <div style="height:12px"></div>
+            <div class="row">
+              <button class="btn small" id="addFactorFromSettings">+ Add factor</button>
+              <button class="btn small" id="exportFactors">Export factors</button>
+            </div>
+            <div style="height:12px"></div>
+            <div style="max-height:320px; overflow:auto">
+              ${factorsTableHtml()}
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>Backup & Restore</h3>
+            <div class="help">Download a full JSON backup. Restore on another device/browser.</div>
+            <div style="height:12px"></div>
+            <div class="row">
+              <button class="btn primary" id="backupNow">Download backup</button>
+              <label class="btn" for="restoreFile" style="cursor:pointer">Restore JSON</label>
+              <input id="restoreFile" type="file" accept="application/json,.json" style="display:none" />
+            </div>
+            <div style="height:12px"></div>
+            <div class="hint"><div aria-hidden="true">🔒</div><div>
+              Privacy: CarbonCue doesn't upload data anywhere. Everything stays in your browser unless you export.
+              <small>For team use, plug this UI into a backend (Supabase/Firebase) later — but this hackathon build is fully functional without it.</small>
+            </div></div>
+          </div>
+
+          <div class="card">
+            <h3>Danger zone</h3>
+            <div class="help">Reset clears ALL entries and custom factors from this browser.</div>
+            <div style="height:12px"></div>
+            <button class="btn danger" id="resetAll">Reset everything</button>
+          </div>
+        </div>
+      `;
+      $("#page").innerHTML = body;
+
+      $("#saveOrg").onclick = ()=>{
+        store.org.name = $("#org_name").value.trim() || "Your Organization";
+        store.org.currency = $("#org_currency").value;
+        store.org.gridFactorId = $("#org_gridFactor").value;
+        saveStore();
+        toast("Saved", "Organization settings updated.", "ok");
+        render();
+      };
+
+      $("#saveTargets").onclick = ()=>{
+        const m = $("#t_month").value.trim();
+        const y = $("#t_year").value.trim();
+        store.targets.monthlyKg = m === "" ? null : Number(m);
+        store.targets.annualKg = y === "" ? null : Number(y);
+        saveStore();
+        toast("Saved", "Targets updated.", "ok");
+        render();
+      };
+
+      $("#dep_add").onclick = ()=>{
+        const name = $("#dep_new").value.trim();
+        if(!name) return;
+        if(store.departments.includes(name)){
+          toast("Already exists", "That department is already in the list.", "warn");
+          return;
+        }
+        store.departments.push(name);
+        $("#dep_new").value = "";
+        saveStore();
+        toast("Added", "Department added.", "ok");
+        render();
+      };
+
+      $("#page").addEventListener("click", (e)=>{
+        const del = e.target.closest("[data-dep-del]");
+        if(del){
+          const name = del.dataset.depDel;
+          if(store.departments.length <= 1){
+            toast("Can't remove", "Keep at least one department.", "danger");
+            return;
+          }
+          store.departments = store.departments.filter(d=>d!==name);
+          for(const en of store.entries){
+            if(en.department === name) en.department = store.departments[0];
+          }
+          saveStore();
+          toast("Removed", "Department removed; entries reassigned.", "warn");
+          render();
+        }
+        const editFactor = e.target.closest("[data-factor-edit]");
+        const delFactor = e.target.closest("[data-factor-del]");
+        if(editFactor){
+          const id = editFactor.dataset.factorEdit;
+          const f = store.factors[id];
+          if(f) openEditFactorModal(f);
+        }
+        if(delFactor){
+          const id = delFactor.dataset.factorDel;
+          if(id === store.org.gridFactorId){
+            toast("Blocked", "This factor is in use as your grid factor. Choose another first.", "danger");
+            return;
+          }
+          openModal({
+            title:"Delete factor?",
+            bodyHtml:`<p class="help">This removes the factor. Entries that reference it will keep their recorded emissions but may lose the preset link.</p>`,
+            footerHtml:`<button class="btn" id="fd_cancel">Cancel</button><button class="btn danger" id="fd_go">Delete</button>`,
+            onMount:()=>{
+              $("#fd_cancel").onclick = closeModal;
+              $("#fd_go").onclick = ()=>{
+                closeModal();
+                delete store.factors[id];
+                for(const en of store.entries){
+                  if(en.factorId === id) en.factorId = "";
+                }
+                saveStore();
+                toast("Deleted", "Factor removed.", "warn");
+                render();
+              };
+            }
+          });
+        }
+      });
+
+      $("#addFactorFromSettings").onclick = ()=> openFactorModal({after: ()=> render()});
+      $("#exportFactors").onclick = ()=>{
+        download(`carboncue_factors_${todayISO()}.json`, JSON.stringify(store.factors, null, 2), "application/json");
+        toast("Export ready", "Downloaded factors JSON.", "ok");
+      };
+
+      $("#backupNow").onclick = ()=> backupNow();
+      $("#restoreFile").onchange = async (e)=>{
+        const file = e.target.files?.[0];
+        if(!file) return;
+        try{
+          const text = await file.text();
+          const incoming = JSON.parse(text);
+          if(!incoming || !incoming.meta || incoming.meta.version !== 1) throw new Error("Invalid backup format");
+          store = incoming;
+          saveStore();
+          toast("Restored", "Backup restored successfully.", "ok");
+          render();
+        }catch(err){
+          toast("Restore failed", "That JSON file doesn't look like a CarbonCue backup.", "danger");
+        }finally{
+          e.target.value = "";
+        }
+      };
+
+      $("#resetAll").onclick = ()=>{
+        openModal({
+          title:"Reset everything?",
+          bodyHtml:`<div class="help">This will delete ALL entries, targets, and custom factors in this browser. Download a backup first if you need it.</div>`,
+          footerHtml:`<button class="btn" id="r_cancel">Cancel</button><button class="btn danger" id="r_go">Reset</button>`,
+          onMount:()=>{
+            $("#r_cancel").onclick = closeModal;
+            $("#r_go").onclick = ()=>{
+              closeModal();
+              store = structuredClone(DEFAULT_STORE);
+              saveStore();
+              toast("Reset done", "CarbonCue is back to a clean state.", "warn");
+              render();
+            };
+          }
+        });
+      };
+    }
+
+    function factorsTableHtml(){
+      const factors = Object.values(store.factors).sort((a,b)=>normalizeCategory(a.category).localeCompare(normalizeCategory(b.category)) || a.name.localeCompare(b.name));
+      return `
+        <table class="table">
+          <thead><tr>
+            <th>Name</th><th>Category</th><th class="right">kg/unit</th><th>Unit</th><th></th>
+          </tr></thead>
+          <tbody>
+            ${factors.map(f=>`<tr>
+              <td><b>${escapeHtml(f.name)}</b><div class="help">${escapeHtml(f.source||"")}</div></td>
+              <td>${escapeHtml(normalizeCategory(f.category))}</td>
+              <td class="right mono">${fmt4.format(Number(f.kgPerUnit||0))}</td>
+              <td class="mono">${escapeHtml(f.unit||"")}</td>
+              <td class="right">
+                <div class="row" style="justify-content:flex-end">
+                  <button class="btn small" data-factor-edit="${escapeHtml(f.id)}">Edit</button>
+                  <button class="btn small danger" data-factor-del="${escapeHtml(f.id)}">Delete</button>
+                </div>
+              </td>
+            </tr>`).join("")}
+          </tbody>
+        </table>
+      `;
+    }
+
+    function openEditFactorModal(f){
+      openModal({
+        title: "Edit emission factor",
+        bodyHtml: `
+          <div class="grid cols2">
+            <div class="field">
+              <label>Name</label>
+              <input class="input" id="ef_name" value="${escapeHtml(f.name)}" />
+            </div>
+            <div class="field">
+              <label>Category</label>
+              <select id="ef_category">
+                ${["Electricity","Transport","Stationary","Waste","Supply Chain"].map(c=>`<option value="${c}" ${normalizeCategory(f.category)===c?"selected":""}>${c}</option>`).join("")}
+              </select>
+            </div>
+            <div class="field">
+              <label>Unit</label>
+              <input class="input" id="ef_unit" value="${escapeHtml(f.unit||"")}" />
+            </div>
+            <div class="field">
+              <label>kgCO₂e per unit</label>
+              <input class="input" id="ef_kg" type="number" step="0.0000001" min="0" value="${escapeHtml(f.kgPerUnit)}" />
+            </div>
+            <div class="field" style="grid-column:1/-1">
+              <label>Source</label>
+              <input class="input" id="ef_source" value="${escapeHtml(f.source||"")}" />
+            </div>
+            <div class="field">
+              <label>Default scope</label>
+              <select id="ef_scope">
+                ${["Scope 1","Scope 2","Scope 3"].map(s=>`<option value="${s}" ${f.scopeDefault===s?"selected":""}>${s}</option>`).join("")}
+              </select>
+            </div>
+          </div>
+        `,
+        footerHtml: `<button class="btn" id="ef_cancel">Cancel</button><button class="btn primary" id="ef_save">Save</button>`,
+        onMount: ()=>{
+          $("#ef_cancel").onclick = closeModal;
+          $("#ef_save").onclick = ()=>{
+            const kg = Number($("#ef_kg").value);
+            if(!Number.isFinite(kg) || kg < 0){
+              toast("Invalid", "kg/unit must be a valid non-negative number.", "danger");
+              return;
+            }
+            store.factors[f.id] = {
+              ...store.factors[f.id],
+              name: $("#ef_name").value.trim() || f.name,
+              category: $("#ef_category").value,
+              unit: $("#ef_unit").value.trim() || f.unit,
+              kgPerUnit: kg,
+              source: $("#ef_source").value.trim(),
+              scopeDefault: $("#ef_scope").value
+            };
+            saveStore();
+            closeModal();
+            toast("Saved", "Factor updated.", "ok");
+            render();
+          };
+        }
+      });
+    }
+
+    function backupNow(){
+      download(`carboncue_backup_${todayISO()}.json`, JSON.stringify(store, null, 2), "application/json");
+      toast("Backup downloaded", "Keep it safe to restore later.", "ok");
+    }
+
+    function render(){
+      updateSidebarPill();
+
+      const route = (location.hash || "#/dashboard").replace("#/","");
+      const routeName = route.split("?")[0];
+
+      setActiveNav(routeName);
+
+      $("#closeSidebar").onclick = ()=> $("#sidebar").classList.add("hidden");
+      $("#openSidebar").onclick = ()=> $("#sidebar").classList.remove("hidden");
+
+      $("#backupBtn").onclick = backupNow;
+
+      $("#quickAddBtn").onclick = ()=>{
+        location.hash = "#/data";
+        setTimeout(()=> {
+          const el = $("#entryForm input[name='activityLabel']");
+          if(el) el.focus();
+        }, 50);
+      };
+
+      $("#globalSearch").oninput = ()=>{
+        const r = (location.hash || "#/dashboard").replace("#/","");
+        if(r.startsWith("dashboard")) renderDashboard();
+        else if(r.startsWith("data")) renderData();
+        else if(r.startsWith("reports")) renderReports();
+        else if(r.startsWith("cues")) renderCues();
+        else if(r.startsWith("settings")) renderSettings();
+      };
+
+      if(routeName === "dashboard") renderDashboard();
+      else if(routeName === "data") renderData();
+      else if(routeName === "reports") renderReports();
+      else if(routeName === "cues") renderCues();
+      else if(routeName === "settings") renderSettings();
+      else { location.hash = "#/dashboard"; renderDashboard(); }
+
+      // auto-close sidebar on mobile after nav click
+      $$("#nav a").forEach(a=>{
+        a.onclick = ()=> { if(window.innerWidth < 860) $("#sidebar").classList.add("hidden"); };
+      });
+
+      // Edit buttons in dashboard table
+      $("#page").addEventListener("click", (e)=>{
+        const b = e.target.closest("[data-edit]");
+        if(b){
+          const id = b.dataset.edit;
+          const entry = store.entries.find(x=>x.id===id);
+          if(entry) openEntryEditModal(entry);
+        }
+      }, { once: true });
+    }
+
+    window.addEventListener("hashchange", ()=>{
+      destroyCharts();
+      render();
+    });
+
+    // first-run: open sidebar on desktop, hide on mobile
+    if(window.innerWidth >= 860) $("#sidebar").classList.remove("hidden");
+    updateSidebarPill();
+    render();
+  </script>
+</body>
+</html>
